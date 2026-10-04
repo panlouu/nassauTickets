@@ -1,0 +1,120 @@
+# Entendendo o código do nassauTickets
+
+Este documento explica o projeto de um jeito direto, como se fosse uma anotação feita durante o desenvolvimento. A ideia não é só dizer o que cada arquivo faz, mas mostrar por que ele existe e como as partes se conectam.
+
+## 1. Como o projeto foi separado
+
+O projeto tem duas partes principais: `frontend` e `backend`.
+
+- `frontend/`: é a parte que o usuário vê. Foi feita com React.
+- `backend/`: é a parte que recebe as requisições, aplica as regras e conversa com o MySQL.
+- `docs/`: guarda a documentação da atividade.
+
+A comunicação acontece por uma API REST. O React não acessa o banco diretamente. Ele pede uma informação ao backend, o backend consulta ou altera o MySQL e depois devolve uma resposta.
+
+## 2. Frontend
+
+### `frontend/src/main.jsx`
+
+É o ponto de entrada do React. O `ReactDOM.createRoot(...)` pega o elemento `root` do `index.html` e coloca o componente `App` dentro dele.
+
+O `React.StrictMode` ajuda a encontrar alguns problemas durante o desenvolvimento. Ele não é uma tela do sistema; serve para deixar o desenvolvimento mais seguro.
+
+### `frontend/src/App.jsx`
+
+É o arquivo que concentra as telas e os componentes principais.
+
+`useState` aparece quando precisamos guardar alguma informação que pode mudar. Por exemplo, a senha que acabou de ser emitida, o número do guichê ou o usuário que está logado.
+
+`useEffect` é usado quando precisamos executar alguma coisa depois que o componente aparece. No painel, ele é usado para buscar as últimas chamadas a cada três segundos.
+
+O `Header` recebe informações por props e muda a página atual. O `Totem` envia a solicitação para emitir a senha. `Login` faz a autenticação. `Atendente` chama e controla o atendimento. `Painel` mostra as últimas chamadas. `Relatorios` apresenta os dados retornados pelo backend.
+
+### `frontend/src/api.js`
+
+A função `request` centraliza as chamadas para o backend. Isso evita repetir `fetch`, cabeçalhos e tratamento de erros em vários componentes.
+
+Quando existe um token salvo no navegador, ele é enviado no cabeçalho `Authorization`. Dessa forma, o backend consegue saber quem está fazendo a requisição.
+
+### `frontend/src/styles.css`
+
+Aqui fica o visual da aplicação. O arquivo define o cabeçalho, cartões, botões, formulários, tabelas, painel e também regras para telas menores.
+
+## 3. Backend
+
+### `backend/src/server.js`
+
+É o arquivo mais importante do backend. Ele cria o Express, libera o CORS, permite receber JSON e registra as rotas da API.
+
+A função `businessDay()` verifica se o horário atual está entre 7h e 17h. A função `datePrefix()` monta a parte da data usada no número da senha. Já `validateType()` evita que chegue um tipo de senha que não existe no sistema.
+
+### Login
+
+`POST /api/auth/login` recebe usuário e senha. O banco é consultado pelo nome de usuário e o `bcryptjs` compara a senha informada com o hash salvo. Se estiver tudo certo, o servidor cria um JWT válido por oito horas.
+
+### Emissão de senha
+
+`POST /api/tickets` recebe `SP`, `SG` ou `SE`. O backend confere o horário, inicia uma transação, calcula a próxima sequência daquele tipo no dia, grava a senha e registra a emissão na auditoria.
+
+A transação é importante porque a emissão e o registro da auditoria fazem parte da mesma operação: se alguma etapa falhar, o código faz `rollback`.
+
+### Próxima senha
+
+`selectNextTicket()` consulta a configuração de prioridade e busca uma senha que esteja em `AGUARDANDO`. O `ORDER BY` organiza a fila pela prioridade e, dentro da mesma prioridade, pela ordem de emissão.
+
+A chamada da próxima senha também acontece dentro de uma transação. O `FOR UPDATE` bloqueia a linha escolhida enquanto a operação está sendo concluída. Isso ajuda a tratar o cenário em que dois atendentes tentam pegar a próxima senha quase ao mesmo tempo.
+
+### Chamar novamente
+
+`POST /api/tickets/:id/recall` aumenta o contador de chamadas e registra o segundo chamado. A atividade considera que, depois de duas chamadas sem comparecimento, a senha pode ser marcada como `NAO_COMPARECEU`.
+
+### Início e finalização
+
+`/start` muda a senha para `EM_ATENDIMENTO` e grava o horário de início. `/finish` muda para `ATENDIDA` e grava o horário de término.
+
+### Painel
+
+`GET /api/panel` busca as cinco últimas senhas que passaram pelo atendimento. O React consulta essa rota periodicamente para manter o painel atualizado.
+
+### Relatórios e auditoria
+
+`/api/reports` calcula quantidades de senhas emitidas e atendidas, separa os tipos e calcula o tempo médio de atendimento.
+
+`/api/audit` consulta o histórico das ações. Isso permite saber qual atendente, guichê e senha estiveram envolvidos em cada ação registrada.
+
+## 4. Autenticação
+
+### `backend/src/auth.js`
+
+`authRequired` verifica se a requisição possui um token Bearer e usa o JWT para validar esse token.
+
+`managerRequired` faz uma segunda verificação para as funções que são exclusivas do gestor. Assim, não basta estar logado: para acessar relatórios e auditoria, o usuário também precisa ter o perfil correto.
+
+## 5. Banco de dados
+
+### `backend/src/db.js`
+
+Cria um pool de conexões usando `mysql2/promise`. Em vez de abrir uma conexão nova para cada consulta, o servidor pode reaproveitar conexões do pool.
+
+### `backend/sql/schema.sql`
+
+Cria o banco `nassau_tickets` e as tabelas principais:
+
+- `settings`: guarda a vez atual da prioridade.
+- `attendants`: guarda os usuários do sistema.
+- `tickets`: guarda as senhas, seus estados, horários e guichês.
+- `audit_logs`: registra as ações feitas durante o atendimento.
+
+## 6. O caminho completo de uma ação
+
+Quando o cliente escolhe `SP` no totem, o React chama `POST /api/tickets`. O Express recebe `SP`, confere a regra de horário, grava a senha no MySQL e devolve o número criado. O React recebe a resposta e mostra a senha na tela.
+
+Depois, o atendente chama a próxima senha. O React envia o guichê para `POST /api/tickets/next`. O backend consulta a fila, escolhe a senha de acordo com a prioridade, atualiza o estado, registra a auditoria e devolve a senha chamada. O React mostra o resultado para o atendente e o painel passa a enxergar essa chamada.
+
+Esse mesmo padrão se repete no restante do sistema: **tela → API → regra → banco → resposta → tela**.
+
+## 7. Arquivo `.env`
+
+O `.env` guarda informações que mudam de uma máquina para outra, como usuário, senha, porta e nome do banco. Por isso ele não deve ser enviado para o GitHub.
+
+O projeto usa `.env.example` como modelo para quem for configurar o sistema pela primeira vez.
