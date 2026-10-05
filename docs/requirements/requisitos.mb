@@ -1,0 +1,32 @@
+# Requisitos do nassauTickets
+
+## Funcionais
+
+- Emitir senhas SP, SG e SE pelo totem.
+- Controlar a fila.
+- Chamar a próxima senha.
+- Chamar novamente.
+- Iniciar e finalizar atendimento.
+- Exibir as cinco últimas chamadas.
+- Registrar guichê e atendente.
+- Produzir relatório diário.
+- Registrar auditoria.
+- Permitir login de atendente/gestor.
+
+## Regras
+
+- SP tem maior prioridade.
+- SG tem menor prioridade.
+- SE possui atendimento operacional especial e é considerada após SP.
+- Qualquer guichê atende qualquer tipo.
+- Senhas não atendidas após duas chamadas podem ser marcadas como não comparecimento.
+- Expediente: 07h às 17h.
+- Senhas restantes na fila ao fim do expediente devem ser descartadas.
+
+## Máquina de estados
+
+```text
+EMITIDA -> AGUARDANDO -> CHAMADA -> CHAMADA_NOVAMENTE -> EM_ATENDIMENTO -> ATENDIDA
+                                      \
+                                       -> NÃO_COMPARECEU
+```
