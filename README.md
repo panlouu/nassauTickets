@@ -125,8 +125,8 @@ Frontend pode usar `VITE_API_URL` para alterar a URL da API.
 
 ## Membros
 
-| Nome | Matrícula | Papel |
-|---|---|---|
+| Nome | Matrícula | Papel | Papel
+|---|---|---|---|
 | Pablo Oliveira | 01837789 | Scrum Master | Desenvolvedor
 | Aylla Rocha | 01815795 | Documentador | Testador
 
