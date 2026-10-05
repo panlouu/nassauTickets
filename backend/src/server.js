@@ -14,10 +14,14 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT || 3001);
 
+console.log("HORÁRIO DO SERVIDOR:", new Date().toString());
+console.log("HORA:", new Date().getHours());
+
 function businessDay() {
   const now = new Date();
   const hour = now.getHours();
-  return hour >= 7 && hour < 17;
+
+  return hour >= 7 && hour <= 23;
 }
 
 function datePrefix() {
